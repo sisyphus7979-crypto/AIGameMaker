@@ -1,0 +1,20 @@
+steps:
+  # 1. 필요한 라이브러리 설치
+  - name: 'node:18'
+    entrypoint: npm
+    args: ['install']
+
+  # 2. 웹 프로젝트 빌드 (dist 폴더 생성)
+  - name: 'node:18'
+    entrypoint: npm
+    args: ['run', 'build']
+
+  # 3. Firebase에 배포 (등록한 서비스 계정 열쇠 사용)
+  - name: 'gcr.io/firebase-runners/firebase-tools'
+    entrypoint: 'bash'
+    args: 
+      - '-c'
+      - |
+        echo '${_SERVICE_ACCOUNT_KEY}' > key.json
+        export GOOGLE_APPLICATION_CREDENTIALS=key.json
+        firebase deploy --only hosting,functions --non-interactive
