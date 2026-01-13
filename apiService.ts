@@ -1,5 +1,6 @@
-// [신규 로직: 상단에 스위치 변수 추가]
-const IS_MOCK = false; // 테스트 중엔 true, 실제 서버 연결 시 false로 변경
+// 확실하게 실제 서버를 호출하도록 설정
+const IS_MOCK = false; 
+console.log("[Client] Running in Production Mode. Mocking is disabled.");
 
 export const apiService = {
   startTraining: async (modelName: string, triggerWord: string, files: File[]) => {
@@ -48,7 +49,10 @@ export const apiService = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt, style, type }),
         });
-        if (!response.ok) throw new Error('GENERATE_FAILED');
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'GENERATE_FAILED' }));
+          throw new Error(errorData.error || 'GENERATE_FAILED');
+        }
         const data = await response.json();
         return data.url;
       }
