@@ -1,15 +1,15 @@
 steps:
-  # 1. 필요한 라이브러리 설치
+  # 1. 의존성 설치
   - name: 'node:18'
     entrypoint: npm
     args: ['install']
 
-  # 2. 웹 프로젝트 빌드 (dist 폴더 생성)
+  # 2. 프로젝트 빌드 (이때 프론트엔드 코드가 번들링됩니다)
   - name: 'node:18'
     entrypoint: npm
     args: ['run', 'build']
 
-  # 3. Firebase에 배포 (등록한 서비스 계정 열쇠 사용)
+  # 3. Firebase 배포 및 API 키 강제 설정
   - name: 'gcr.io/firebase-runners/firebase-tools'
     entrypoint: 'bash'
     args: 
@@ -17,4 +17,10 @@ steps:
       - |
         echo '${_SERVICE_ACCOUNT_KEY}' > key.json
         export GOOGLE_APPLICATION_CREDENTIALS=key.json
+        # 서버 환경변수 설정
+        firebase functions:config:set replicate.api_token="r8_D21odOesSY9lkKGksxAcQH8m6dlvOwh1aCffv"
+        # 배포 실행
         firebase deploy --only hosting,functions --non-interactive
+
+options:
+  logging: NONE
