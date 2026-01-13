@@ -29,10 +29,15 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Replicate 초기화 안전 장치 (API 키가 없어도 서버가 죽지 않도록 처리)
 let replicate = null;
 try {
-  if (process.env.REPLICATE_API_TOKEN) {
-    replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+  // Firebase Functions 환경 변수에서 직접 가져오거나, 
+  // 사용자님이 등록한 replicate.key를 시스템 환경변수로 연결해야 합니다.
+  const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN || "r8_D21odOesSY9lkKGksxAcQH8m6dlvOwh1aCffv"; // 직접 주입하여 확실하게 작동 보장
+
+  if (REPLICATE_TOKEN) {
+    replicate = new Replicate({ auth: REPLICATE_TOKEN });
+    console.log("[Server] Replicate initialized successfully.");
   } else {
-    console.warn("[Server] Warning: REPLICATE_API_TOKEN is missing. Running in Mock Mode only.");
+    console.warn("[Server] Warning: REPLICATE_API_TOKEN is missing.");
   }
 } catch (err) {
   console.error("[Server] Replicate init failed:", err.message);
@@ -77,12 +82,67 @@ app.post('/api/train', (req, res) => {
 });
 
 app.post('/api/generate', async (req, res) => {
+  if (!replicate) {
+    console.error("[API Error] Replicate not initialized. Check REPLICATE_API_TOKEN.");
+    return res.status(500).json({ error: "Image generation service is not configured on the server." });
+  }
+
   try {
-    res.json({ url: "https://via.placeholder.com/1024" });
+    const { prompt, style } = req.body;
+
+    let modelId = '';
+    let input = {
+      prompt: prompt,
+      width: 512,
+      height: 640,
+    };
+
+    if (style.startsWith('custom_')) {
+      const [version, trigger] = style.replace('custom_', '').split('|');
+      modelId = version;
+      input.prompt = `${trigger}, ${prompt}`;
+    } else {
+      switch (style) {
+        case 'anime_v1':
+          modelId = 'cagliostrolab/animagine-xl-3.0:54907958f2c375631b1ba4192b950666060d5a37330c6c21e3f7c3270923f545';
+          input.prompt = `${prompt}, anime artwork, anime style, key visual, vibrant, studio anime, highly detailed`;
+          input.negative_prompt = 'low quality, normal quality, lowres, polar lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, jpeg artifacts, signature, watermark, username, blurry';
+          break;
+        case 'pixel_art':
+          modelId = 'nerdyrodent/dreamlike-pixelart-diffusion-v1-0:df73919e996d19c356f7036495b642a66e07a6110e5d0343a850125868f02919';
+          input.prompt = `pixelart, ${prompt}`;
+          break;
+        case 'realistic':
+          modelId = 'stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b';
+          input.prompt = `photorealistic, ${prompt}, 8k, highly detailed, sharp focus`;
+          break;
+        case 'watercolor':
+          modelId = 'tst/watercolor:36d1733649633e6f5412f1702f37e4465de8f4604a43b7642f654b684877e8a9';
+          input.prompt = `${prompt}, watercolor painting`;
+          break;
+        case 'fantasy_rpg':
+          modelId = 'stablediffusionapi/dark-fantasy-gothic:b71a4f28030c6a5af58bba819e9171f65349e5480746f3647413d0c9f1604085';
+          input.prompt = `${prompt}, dark fantasy, gothic, detailed, intricate`;
+          break;
+        default:
+          modelId = 'stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b';
+      }
+    }
+    
+    console.log(`[API Generate] Running model ${modelId} with prompt: "${input.prompt}"`);
+    const output = await replicate.run(modelId, { input });
+
+    if (!output || !Array.isArray(output) || output.length === 0) {
+      throw new Error("Replicate API did not return a valid image.");
+    }
+    
+    res.json({ url: output[0] });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("[API Error /api/generate]", error);
+    res.status(500).json({ error: error.message || "Failed to generate image." });
   }
 });
+
 
 app.post('/api/remove-bg', async (req, res) => {
   try {
